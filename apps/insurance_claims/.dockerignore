@@ -1,0 +1,17 @@
+.git
+.gitignore
+.vscode
+.venv
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache
+.env
+.DS_Store
+*.egg-info
+dist
+build
+tests
+*.md
+.env.example

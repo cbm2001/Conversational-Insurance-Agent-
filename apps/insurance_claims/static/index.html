@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Insurance SOP Agent</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-slate-100 min-h-screen text-slate-800">
+  <div class="max-w-3xl mx-auto p-4 flex flex-col min-h-screen">
+    <header class="mb-4">
+      <h1 class="text-2xl font-semibold text-slate-900">Insurance Claims Support</h1>
+      <p class="text-sm text-slate-600 mt-1">SOP-guided conversational agent demo</p>
+      <div class="flex flex-wrap items-center gap-2 mt-3">
+        <span id="phaseBadge" class="inline-flex items-center rounded-full bg-indigo-100 text-indigo-800 px-3 py-1 text-xs font-medium">
+          Phase: VERIFY_ID
+        </span>
+        <span id="verifiedBadge" class="inline-flex items-center rounded-full bg-amber-100 text-amber-900 px-3 py-1 text-xs font-medium">
+          Verified: No
+        </span>
+        <span id="caseBadge" class="inline-flex items-center rounded-full bg-slate-200 text-slate-800 px-3 py-1 text-xs font-medium">
+          Case: —
+        </span>
+        <button id="newChatButton" type="button" class="rounded-lg bg-slate-900 text-white px-3 py-1.5 text-xs font-medium hover:bg-slate-700">
+          + New Chat
+        </button>
+      </div>
+    </header>
+
+    <main id="chat" class="flex-1 overflow-y-auto bg-white rounded-xl shadow-sm border border-slate-200 p-4 space-y-3 mb-4"></main>
+
+    <form id="chatForm" class="flex gap-2 pb-4">
+      <input
+        id="messageInput"
+        type="text"
+        autocomplete="off"
+        placeholder="Type your message…"
+        class="flex-1 rounded-lg border border-slate-300 px-4 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+      />
+      <button
+        type="submit"
+        class="rounded-lg bg-indigo-600 text-white px-5 py-2 font-medium hover:bg-indigo-700 disabled:opacity-50"
+      >
+        Send
+      </button>
+    </form>
+  </div>
+
+  <script>
+    let sessionId = "";
+
+    const initialGreeting =
+      "Hello, thank you for calling insurance claims support. Before we discuss any claim details, I need to verify your identity. May I have your full name and a few details on file?";
+
+    function createSessionId() {
+      return crypto.randomUUID ? crypto.randomUUID() : "session-" + Date.now() + "-" + Math.random().toString(16).slice(2);
+    }
+
+    async function ensureSession() {
+      if (sessionId) return sessionId;
+      sessionId = createSessionId();
+      return sessionId;
+    }
+
+    function resetBadges() {
+      updateBadges("VERIFY_ID", false, "");
+    }
+
+    function startNewChat() {
+      sessionId = createSessionId();
+      document.getElementById("chat").replaceChildren();
+      resetBadges();
+      appendBubble("assistant", initialGreeting);
+      document.getElementById("messageInput").focus();
+    }
+
+    function appendBubble(role, text) {
+      const chat = document.getElementById("chat");
+      const wrap = document.createElement("div");
+      wrap.className = role === "user" ? "flex justify-end" : "flex justify-start";
+      const bubble = document.createElement("div");
+      bubble.className =
+        role === "user"
+          ? "max-w-[85%] rounded-2xl rounded-br-md bg-indigo-600 text-white px-4 py-2 text-sm"
+          : "max-w-[85%] rounded-2xl rounded-bl-md bg-slate-100 text-slate-800 px-4 py-2 text-sm whitespace-pre-wrap";
+      bubble.textContent = text;
+      wrap.appendChild(bubble);
+      chat.appendChild(wrap);
+      chat.scrollTop = chat.scrollHeight;
+    }
+
+    function showTyping() {
+      const chat = document.getElementById("chat");
+      const wrap = document.createElement("div");
+      wrap.id = "typingIndicator";
+      wrap.className = "flex justify-start";
+      const bubble = document.createElement("div");
+      bubble.className = "max-w-[85%] rounded-2xl rounded-bl-md bg-slate-100 text-slate-500 px-4 py-2 text-sm italic";
+      bubble.textContent = "Agent is typing...";
+      wrap.appendChild(bubble);
+      chat.appendChild(wrap);
+      chat.scrollTop = chat.scrollHeight;
+    }
+
+    function hideTyping() {
+      document.getElementById("typingIndicator")?.remove();
+    }
+
+    function updateBadges(phase, verified, caseId) {
+      document.getElementById("phaseBadge").textContent = "Phase: " + phase;
+      const vBadge = document.getElementById("verifiedBadge");
+      if (verified) {
+        vBadge.textContent = "Verified: Yes";
+        vBadge.className =
+          "inline-flex items-center rounded-full bg-emerald-100 text-emerald-800 px-3 py-1 text-xs font-medium";
+      } else {
+        vBadge.textContent = "Verified: No";
+        vBadge.className =
+          "inline-flex items-center rounded-full bg-amber-100 text-amber-900 px-3 py-1 text-xs font-medium";
+      }
+      document.getElementById("caseBadge").textContent = "Case: " + (caseId || "—");
+    }
+
+    document.getElementById("chatForm").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const input = document.getElementById("messageInput");
+      const message = input.value.trim();
+      if (!message) return;
+      input.value = "";
+      input.disabled = true;
+
+      appendBubble("user", message);
+      await ensureSession();
+      showTyping();
+
+      try {
+        const res = await fetch("/api/chat", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ session_id: sessionId, message }),
+        });
+        if (!res.ok) {
+          const raw = await res.text();
+          let detail = raw || "Request failed";
+          try {
+            const err = JSON.parse(raw);
+            detail = err.detail || (typeof err === "string" ? err : JSON.stringify(err));
+          } catch (_) {
+            /* plain-text error body */
+          }
+          throw new Error(typeof detail === "string" ? detail : "Request failed");
+        }
+        const data = await res.json();
+        appendBubble("assistant", data.reply);
+        updateBadges(data.phase, data.verified, data.case_id);
+      } catch (err) {
+        appendBubble("assistant", "Error: " + err.message);
+      } finally {
+        hideTyping();
+        input.disabled = false;
+        input.focus();
+      }
+    });
+
+    document.getElementById("newChatButton").addEventListener("click", startNewChat);
+
+    (async () => {
+      await ensureSession();
+      resetBadges();
+      appendBubble("assistant", initialGreeting);
+    })();
+  </script>
+</body>
+</html>

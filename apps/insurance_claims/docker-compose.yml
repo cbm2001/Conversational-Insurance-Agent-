@@ -1,0 +1,29 @@
+services:
+  insurance-agent:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: insurance-claims-agent
+    ports:
+      - "8000:8000"
+    environment:
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      PYTHONUNBUFFERED: "1"
+    env_file:
+      - .env
+    volumes:
+      - ./:/app
+      - /app/__pycache__
+    networks:
+      - insurance-net
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+networks:
+  insurance-net:
+    driver: bridge
